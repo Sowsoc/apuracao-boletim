@@ -98,11 +98,11 @@
   const share22 = (u) => { const r = T22[u]; return r ? r[1] / (r[0] + r[1]) : null; }; // fatia de Bolsonaro
   const share1 = (u) => { const b = S.t1[u]; return b && b.F + b.L > 0 ? b.F / (b.F + b.L) : null; };
 
-  function swings(baseFn) {
+  function swings(baseFn, U) {
     let n = 0, d = 0;
     const reg = {};
     for (const [u, , r] of UFS) {
-      const a = S.uf[u], b = baseFn(u);
+      const a = U[u], b = baseFn(u);
       if (!a || b == null || a.F + a.L < 1) continue;
       const w = a.F + a.L, x = w * (a.F / w - b);
       n += x; d += w;
@@ -125,12 +125,12 @@
     return p == null ? null : Math.min(.98, Math.max(.02, p));
   }
 
-  function project() {
-    const sw1 = swings(share1), sw22 = swings(share22);
+  function project(U = S.uf, br = S.br) {
+    const sw1 = swings(share1, U), sw22 = swings(share22, U);
     let PF = 0, PL = 0, REM = 0;
     const per = {};
     for (const [u, , reg] of UFS) {
-      const a = S.uf[u], b = S.t1[u];
+      const a = U[u], b = S.t1[u];
       if (!a) continue;
       const w = Math.min(1, a.pst / W_FULL);
       const rate1 = b && b.te ? b.vv / b.te : 0.75;
@@ -144,10 +144,10 @@
       per[u] = { rem, share, prior: pri, pF: 100 * pf / (pf + pl || 1) };
       PF += pf; PL += pl; REM += rem;
     }
-    const ok = S.br && S.br.pst >= 0.3;
-    return { ok, swing: sw1.nat, swing22: sw22.nat, per, PF, PL, REM, pF: 100 * PF / (PF + PL || 1), remShareF: REM ? (PF - sum('F')) / REM : .5 };
+    const ok = br && br.pst >= 0.3;
+    return { ok, swing: sw1.nat, swing22: sw22.nat, per, PF, PL, REM, pF: 100 * PF / (PF + PL || 1), remShareF: REM ? (PF - sum(U, 'F')) / REM : .5 };
   }
-  function sum(k) { let s = 0; for (const u in S.uf) s += S.uf[u][k]; return s; }
+  function sum(U, k) { let s = 0; for (const u in U) s += U[u][k]; return s; }
 
   // ---------- ciclo ----------
   async function poll() {
@@ -188,7 +188,7 @@
     store.set(LS.hist, S.hist);
   }
 
-  function diffFeed(pb, b, pu, nu) {
+  function diffItems(pb, b, pu, nu) {
     const items = [];
     const t = (b.ht || '').slice(0, 5);
     const sh = (o) => o.F + o.L ? 100 * o.F / (o.F + o.L) : null;
@@ -214,9 +214,56 @@
       items.push({ t, h: `${m.flip ? '<b>Virou!</b> ' : ''}<b>${m.nome}</b> foi a ${fP1(m.c.pst)} apurado (+${nf1.format(m.d)}). ${lead}${dv}.` });
     }
     if (moves.length > 4) items.push({ t, h: `Mais ${moves.length - 4} UF${moves.length - 4 > 1 ? 's' : ''} atualizaram.` });
+    return items.map((i) => ({ ...i, ht: b.ht }));
+  }
+  function diffFeed(pb, b, pu, nu) {
+    const items = diffItems(pb, b, pu, nu);
     if (!items.length) return;
-    S.feed = items.map((i) => ({ ...i, n: Date.now() })).concat(S.feed).slice(0, 60);
+    S.feed = items.map((i) => ({ ...i, n: Date.now() })).concat(S.feed).slice(0, 80);
     store.set(LS.feed, S.feed);
+  }
+
+  // ---------- histórico gravado (branch data) ----------
+  // O gravador (tools/recorder.py) publica um retrato completo por atualização do TSE.
+  // Aqui cada retrato vira ponto do gráfico (com a projeção recalculada pelo mesmo modelo)
+  // e os retratos consecutivos viram o feed. A leitura ao vivo completa o que vier depois.
+  const HIST_URL = 'https://raw.githubusercontent.com/Sowsoc/apuracao-boletim/data/history.json';
+  S.srv = { pts: [], chart: [], feed: [], lastHt: null };
+  const unpack = (uf) => { const o = {}; for (const k in uf) { const [pst, te, est, F, L] = uf[k]; o[k] = { pst, te, est, F, L }; } return o; };
+  function buildSrv() {
+    const pts = S.srv.pts, chart = [], feed = [];
+    let prev = null;
+    for (const pt of pts) {
+      const U = unpack(pt.uf), b = pt.br;
+      if (b.F + b.L < 1) continue;
+      const P = project(U, b);
+      chart.push({ x: +b.pst.toFixed(3), y: 100 * b.F / (b.F + b.L), p: P.ok ? P.pF : null, t: b.ht });
+      if (prev) feed.push(...diffItems(prev.b, b, prev.U, U));
+      prev = { b, U };
+    }
+    S.srv.chart = chart;
+    S.srv.feed = feed.reverse();
+    S.srv.lastHt = pts.length ? pts[pts.length - 1].br.ht : null;
+  }
+  async function loadHist() {
+    try {
+      const r = await fetch(HIST_URL + '?m=' + Math.floor(Date.now() / 30000), { cache: 'no-store' });
+      if (r.ok) {
+        const d = await r.json();
+        if (d && Array.isArray(d.pts) && d.pts.length !== S.srv.pts.length) { S.srv.pts = d.pts; buildSrv(); renderChart(); renderFeed(); }
+      }
+    } catch (e) {}
+    setTimeout(loadHist, 60000);
+  }
+  function chartPts() {
+    const c = S.srv.chart;
+    if (!c.length) return S.hist;
+    const lx = c[c.length - 1].x;
+    return c.concat(S.hist.filter((p) => p.x > lx));
+  }
+  function feedItems() {
+    if (!S.srv.lastHt) return S.feed;
+    return S.feed.filter((i) => i.ht && i.ht > S.srv.lastHt).concat(S.srv.feed).slice(0, 120);
   }
 
   // ---------- animação de números ----------
@@ -482,14 +529,15 @@
   // ----- feed -----
   function renderFeed() {
     const f = $('feed');
-    if (!S.feed.length) return;
+    const items = feedItems();
+    if (!items.length) return;
     const now = Date.now();
-    f.innerHTML = S.feed.map((i) => `<li class="${now - i.n < 4000 ? 'new' : ''}"><span class="t">${i.t}</span><span>${i.h}</span></li>`).join('');
+    f.innerHTML = items.map((i) => `<li class="${i.n && now - i.n < 4000 ? 'new' : ''}"><span class="t">${i.t}</span><span>${i.h}</span></li>`).join('');
   }
 
   // ----- gráfico -----
   function renderChart() {
-    const svg = $('chart'), H = S.hist;
+    const svg = $('chart'), H = chartPts();
     const W = Math.max(320, Math.round(svg.clientWidth || 900)), Ht = 280;
     svg.setAttribute('viewBox', `0 0 ${W} ${Ht}`);
     const L = 44, R = 10, T = 12, B = 26;
@@ -511,6 +559,8 @@
       g += `<path class="ap" d="${ap}"/>`;
       const pp = pts.filter((p) => p.p != null);
       if (pp.length) g += `<path class="pr" d="${pp.map((p, i) => `${i ? 'L' : 'M'}${X(p.x).toFixed(1)},${Y(p.p).toFixed(1)}`).join('')}"/>`;
+      const first = pts[0];
+      if (first.x > 1 && first.t) g += `<line class="ax" x1="${X(first.x)}" x2="${X(first.x)}" y1="${T}" y2="${Ht - B}" style="stroke-dasharray:2 3"/><text x="${X(first.x) + 6}" y="${T + 14}">registro desde ${String(first.t).slice(0, 5)}</text>`;
       const last = pts[pts.length - 1];
       g += `<circle cx="${X(last.x)}" cy="${Y(last.y)}" r="4" style="fill:var(--ink)"/>`;
     } else {
@@ -587,6 +637,7 @@
   // ---------- início ----------
   buildMap();
   renderFeed(); renderChart();
-  loadT1().then((t1) => { S.t1 = t1; if (S.br) { S.proj = project(); renderAll(); } });
+  loadT1().then((t1) => { S.t1 = t1; if (S.srv.pts.length) buildSrv(); if (S.br) { S.proj = project(); } renderAll(); });
+  loadHist();
   poll();
 })();
