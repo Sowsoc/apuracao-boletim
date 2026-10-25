@@ -4,7 +4,7 @@
   // ---------- configuração ----------
   const BASE = 'https://resultados.tse.jus.br/oficial/ele2026';
   const ELE2 = '6258', ELE1 = '6257';
-  const POLL_MS = 30000;
+  const POLL_MS = 10000;
   const CF = '22', CL = '13';
   const LS = { hist: 'bol26_hist_v1', feed: 'bol26_feed_v1', t1: 'bol26_t1_v1', theme: 'bol26_theme' };
   const W_FULL = 30; // % de seções a partir do qual a UF "confia" só no próprio apurado
@@ -90,21 +90,46 @@
   };
 
   // ---------- projeção ----------
-  function project() {
-    const ufs = UFS.map((u) => u[0]);
-    // variação nacional = média ponderada por votos de (fatia atual − fatia no 1º turno)
-    let sw = 0, sww = 0;
-    for (const u of ufs) {
-      const a = S.uf[u], b = S.t1[u];
-      if (!a || !b || a.F + a.L < 1 || b.F + b.L < 1) continue;
-      const w = a.F + a.L;
-      sw += w * (a.F / (a.F + a.L) - b.F / (b.F + b.L));
-      sww += w;
+  // Prior histórico por UF: 1º turno 2026 (Flávio × Lula entre os dois) e 2º turno 2022
+  // (Bolsonaro × Lula), cada um deslocado pela variação observada contra ele na mesma
+  // região, encolhida para a variação nacional quando a região tem pouco voto apurado.
+  const K_SHRINK = 300000;   // votos: "peso" da variação nacional dentro de cada região
+  const W_T1 = 0.6;          // peso do 1º turno 2026 no prior (2022 fica com 0,4)
+  const share22 = (u) => { const r = T22[u]; return r ? r[1] / (r[0] + r[1]) : null; }; // fatia de Bolsonaro
+  const share1 = (u) => { const b = S.t1[u]; return b && b.F + b.L > 0 ? b.F / (b.F + b.L) : null; };
+
+  function swings(baseFn) {
+    let n = 0, d = 0;
+    const reg = {};
+    for (const [u, , r] of UFS) {
+      const a = S.uf[u], b = baseFn(u);
+      if (!a || b == null || a.F + a.L < 1) continue;
+      const w = a.F + a.L, x = w * (a.F / w - b);
+      n += x; d += w;
+      (reg[r] = reg[r] || { n: 0, d: 0 }); reg[r].n += x; reg[r].d += w;
     }
-    const swing = sww ? sw / sww : 0;
+    const nat = d ? n / d : 0;
+    const out = { nat };
+    for (const [, , r] of UFS) {
+      const g = reg[r] || { n: 0, d: 0 };
+      out[r] = (g.n + K_SHRINK * nat) / (g.d + K_SHRINK);
+    }
+    return out;
+  }
+
+  function prior(u, reg, sw1, sw22) {
+    const b1 = share1(u), b22 = share22(u);
+    const p1 = b1 == null ? null : b1 + sw1[reg];
+    const p22 = b22 == null ? null : b22 + sw22[reg];
+    let p = p1 != null && p22 != null ? W_T1 * p1 + (1 - W_T1) * p22 : (p1 ?? p22);
+    return p == null ? null : Math.min(.98, Math.max(.02, p));
+  }
+
+  function project() {
+    const sw1 = swings(share1), sw22 = swings(share22);
     let PF = 0, PL = 0, REM = 0;
     const per = {};
-    for (const u of ufs) {
+    for (const [u, , reg] of UFS) {
       const a = S.uf[u], b = S.t1[u];
       if (!a) continue;
       const w = Math.min(1, a.pst / W_FULL);
@@ -113,14 +138,14 @@
       const rate = w * rateA + (1 - w) * rate1;
       const rem = a.pst >= 100 ? 0 : Math.max(0, (a.te - a.est) * rate);
       const cur = a.F + a.L > 0 ? a.F / (a.F + a.L) : null;
-      const base = b && b.F + b.L > 0 ? Math.min(.98, Math.max(.02, b.F / (b.F + b.L) + swing)) : (cur ?? .5);
-      const share = cur == null ? base : w * cur + (1 - w) * base;
+      const pri = prior(u, reg, sw1, sw22) ?? cur ?? .5;
+      const share = cur == null ? pri : w * cur + (1 - w) * pri;
       const pf = a.F + rem * share, pl = a.L + rem * (1 - share);
-      per[u] = { rem, share, pF: 100 * pf / (pf + pl || 1) };
+      per[u] = { rem, share, prior: pri, pF: 100 * pf / (pf + pl || 1) };
       PF += pf; PL += pl; REM += rem;
     }
     const ok = S.br && S.br.pst >= 0.3;
-    return { ok, swing, per, PF, PL, REM, pF: 100 * PF / (PF + PL || 1), remShareF: REM ? (PF - sum('F')) / REM : .5 };
+    return { ok, swing: sw1.nat, swing22: sw22.nat, per, PF, PL, REM, pF: 100 * PF / (PF + PL || 1), remShareF: REM ? (PF - sum('F')) / REM : .5 };
   }
   function sum(k) { let s = 0; for (const u in S.uf) s += S.uf[u][k]; return s; }
 
@@ -177,7 +202,7 @@
     const moves = [];
     for (const [uf, nome] of UFS) {
       const a = pu[uf], c = nu[uf];
-      if (!a || !c || c.pst <= a.pst) continue;
+      if (!a || !c || c.pst - a.pst < 0.1) continue;
       const s0 = sh(a), s1 = sh(c);
       const flip = s0 != null && s1 != null && (s0 - 50) * (s1 - 50) < 0;
       moves.push({ uf, nome, d: c.pst - a.pst, c, s0, s1, flip });
@@ -237,7 +262,7 @@
       const tag = S.br.final ? 'FINAL' : 'AO VIVO';
       st.innerHTML = `<span class="live">${tag}</span>TSE às <b>${S.br.ht}</b>`;
     }
-    if (S.err) { al.hidden = false; al.textContent = `A última leitura falhou (${S.err}). Tentando de novo em 30 s; os números abaixo são da leitura anterior.`; }
+    if (S.err) { al.hidden = false; al.textContent = `A última leitura falhou (${S.err}). Tentando de novo em 10 s; os números abaixo são da leitura anterior.`; }
     else al.hidden = true;
   }
 
@@ -371,6 +396,10 @@
       } else if (mode === 'pr' && pr && S.proj.ok) {
         const mg = 2 * pr.pF - 100; color = tone(mg); level = lvl(mg); frac = 1;
         label = (mg >= 0 ? 'F+' : 'L+') + nf0.format(Math.abs(mg));
+      } else if (mode === 'v22' && sh != null && share22(uf) != null) {
+        const sw = sh - 100 * share22(uf); color = toneSw(sw); frac = 1;
+        level = Math.abs(sw) >= 3 ? 70 : 0;
+        label = (sw >= 0 ? '+' : '−') + nf1.format(Math.abs(sw));
       } else if (mode === 'sw' && sh != null && b && b.F + b.L > 0) {
         const sw = sh - 100 * b.F / (b.F + b.L); color = toneSw(sw); frac = 1;
         level = Math.abs(sw) >= 3 ? 70 : 0;
@@ -396,9 +425,9 @@
 
   function renderLegend() {
     const lg = $('legend');
-    if (S.mapMode === 'sw') {
+    if (S.mapMode === 'sw' || S.mapMode === 'v22') {
       const st = [92, 65, 40, 18];
-      lg.innerHTML = `<span>Flávio melhorou</span><span class="ramp">${st.map((p) => `<i style="background:color-mix(in oklab,var(--f) ${p}%,var(--paper))"></i>`).join('')}${st.slice().reverse().map((p) => `<i style="background:color-mix(in oklab,var(--l) ${p}%,var(--paper))"></i>`).join('')}</span><span>Lula melhorou</span><span>em relação ao 1º turno (faixas: 1, 3, 6 p.p.)</span>`;
+      lg.innerHTML = `<span>Flávio melhorou</span><span class="ramp">${st.map((p) => `<i style="background:color-mix(in oklab,var(--f) ${p}%,var(--paper))"></i>`).join('')}${st.slice().reverse().map((p) => `<i style="background:color-mix(in oklab,var(--l) ${p}%,var(--paper))"></i>`).join('')}</span><span>Lula melhorou</span><span>em relação ${S.mapMode === 'sw' ? 'ao 1º turno' : 'a 2022 (Bolsonaro)'} (faixas: 1, 3, 6 p.p.)</span>`;
     } else {
       const st = [100, 82, 64, 45, 28];
       lg.innerHTML = `<span class="c-f">Flávio</span><span class="ramp">${st.map((p) => `<i style="background:color-mix(in oklab,var(--f) ${p}%,var(--paper))"></i>`).join('')}${st.slice().reverse().map((p) => `<i style="background:color-mix(in oklab,var(--l) ${p}%,var(--paper))"></i>`).join('')}</span><span class="c-l">Lula</span><span>margem: &lt;2 · 2–5 · 5–10 · 10–20 · &gt;20 p.p.</span>`;
@@ -421,6 +450,7 @@
       row('Eleitorado', fMil(a.te)) +
       (s1 != null ? row('1º turno (F × L)', `${fP1(s1)} × ${fP1(100 - s1)}`) : '') +
       (sh != null && s1 != null ? row('Variação Flávio', fPP(sh - s1)) : '') +
+      (share22(uf) != null ? row('2022 (Bolsonaro × Lula)', `${fP1(100 * share22(uf))} × ${fP1(100 - 100 * share22(uf))}`) : '') +
       (pr && S.proj.ok ? row('Projeção Flávio', fP1(pr.pF)) : '');
     card.hidden = false;
     const wrap = svg.parentElement.getBoundingClientRect(), r = svg.getBoundingClientRect();
@@ -497,7 +527,7 @@
       const b = S.t1[uf], pr = S.proj && S.proj.ok && S.proj.per[uf];
       const sh = a.F + a.L ? 100 * a.F / (a.F + a.L) : null;
       const s1 = b && b.F + b.L ? 100 * b.F / (b.F + b.L) : null;
-      out.push({ uf, nome, reg, te: a.te, pst: a.pst, pF: sh, pL: sh == null ? null : 100 - sh, mg: sh == null ? null : 2 * sh - 100, mg1: s1 == null ? null : 2 * s1 - 100, sw: sh != null && s1 != null ? sh - s1 : null, prF: pr ? pr.pF : null });
+      out.push({ uf, nome, reg, te: a.te, pst: a.pst, pF: sh, pL: sh == null ? null : 100 - sh, mg: sh == null ? null : 2 * sh - 100, mg1: s1 == null ? null : 2 * s1 - 100, mg22: share22(uf) == null ? null : 200 * share22(uf) - 100, sw: sh != null && s1 != null ? sh - s1 : null, prF: pr ? pr.pF : null });
     }
     const { k, asc } = S.sort;
     out.sort((x, y) => {
@@ -516,10 +546,10 @@
     const b = S.br, P = S.proj;
     if (b && b.F + b.L) {
       const sh = 100 * b.F / (b.F + b.L);
-      h += `<tr class="br"><td class="tl"><b>BR</b>Brasil</td><td>${fInt(b.te)}</td><td>${fP2(b.pst)}<span class="minibar"><i style="width:${b.pst}%"></i></span></td><td>${fP2(sh)}</td><td>${fP2(100 - sh)}</td><td>${mgf(2 * sh - 100)}</td><td></td><td>${P && P.ok ? fPP(P.swing * 100) : ''}</td><td>${P && P.ok ? fP1(P.pF) : '—'}</td></tr>`;
+      h += `<tr class="br"><td class="tl"><b>BR</b>Brasil</td><td>${fInt(b.te)}</td><td>${fP2(b.pst)}<span class="minibar"><i style="width:${b.pst}%"></i></span></td><td>${fP2(sh)}</td><td>${fP2(100 - sh)}</td><td>${mgf(2 * sh - 100)}</td><td></td><td></td><td>${P && P.ok ? fPP(P.swing * 100) : ''}</td><td>${P && P.ok ? fP1(P.pF) : '—'}</td></tr>`;
     }
     for (const r of rows()) {
-      h += `<tr><td class="tl"><b>${r.uf === 'zz' ? 'EXT' : r.uf.toUpperCase()}</b>${r.nome}</td><td>${fInt(r.te)}</td><td>${fP1(r.pst)}<span class="minibar"><i style="width:${r.pst}%"></i></span></td><td>${v(r.pF, fP1)}</td><td>${v(r.pL, fP1)}</td><td>${v(r.mg, mgf)}</td><td>${v(r.mg1, mgf)}</td><td>${v(r.sw, fPP)}</td><td>${v(r.prF, fP1)}</td></tr>`;
+      h += `<tr><td class="tl"><b>${r.uf === 'zz' ? 'EXT' : r.uf.toUpperCase()}</b>${r.nome}</td><td>${fInt(r.te)}</td><td>${fP1(r.pst)}<span class="minibar"><i style="width:${r.pst}%"></i></span></td><td>${v(r.pF, fP1)}</td><td>${v(r.pL, fP1)}</td><td>${v(r.mg, mgf)}</td><td>${v(r.mg1, mgf)}</td><td>${v(r.mg22, mgf)}</td><td>${v(r.sw, fPP)}</td><td>${v(r.prF, fP1)}</td></tr>`;
     }
     tb.innerHTML = h;
     document.querySelectorAll('#tbl th').forEach((th) => { th.classList.toggle('on', th.dataset.k === S.sort.k); th.classList.toggle('asc', th.dataset.k === S.sort.k && S.sort.asc); });
@@ -539,6 +569,7 @@
       ap: 'Cada hexágono enche de baixo para cima conforme as seções do estado são totalizadas. A cor indica quem lidera e por quanto.',
       pr: 'Resultado projetado de cada UF ao fim da apuração, pelo método descrito no fim da página.',
       sw: 'Quanto a fatia de Flávio (entre os dois) mudou em relação ao 1º turno, com o que já foi apurado.',
+      v22: 'Fatia de Flávio hoje comparada à de Bolsonaro no 2º turno de 2022, estado a estado, com o que já foi apurado.',
     }[S.mapMode];
     renderMap();
   });
