@@ -82,6 +82,16 @@
     </div>
   </section>
 
+  <section class="turnout" aria-label="Comparecimento, abstenção, brancos e nulos">
+    <div class="bh"><h2>Quem votou e como</h2><span class="hint">sobre o que já foi apurado · comparação com o 1º turno</span></div>
+    <div class="facts facts-sm">
+      <div class="fact"><div class="fact-k">Comparecimento</div><div class="fact-v num" id="tCmp">—</div><div class="fact-s num" id="tCmpS"></div></div>
+      <div class="fact"><div class="fact-k">Abstenção</div><div class="fact-v num" id="tAbs">—</div><div class="fact-s num" id="tAbsS"></div></div>
+      <div class="fact"><div class="fact-k">Brancos</div><div class="fact-v num" id="tBr">—</div><div class="fact-s num" id="tBrS"></div></div>
+      <div class="fact"><div class="fact-k">Nulos</div><div class="fact-v num" id="tNu">—</div><div class="fact-s num" id="tNuS"></div></div>
+    </div>
+  </section>
+
   <div class="grid">
     <section class="block map-block">
       <div class="bh">
@@ -91,6 +101,7 @@
           <button type="button" data-m="pr">Projeção</button>
           <button type="button" data-m="sw">× 1º turno</button>
           <button type="button" data-m="v22">× 2022</button>
+          <button type="button" data-m="ab">Abstenção</button>
         </div>
       </div>
       <p class="bnote" id="mapNote">Cada hexágono enche de baixo para cima conforme as seções do estado são totalizadas. A cor indica quem lidera e por quanto.</p>
@@ -148,6 +159,9 @@
           <th data-k="mg22">2022</th>
           <th data-k="sw">Variação</th>
           <th data-k="prF">Proj. Flávio</th>
+          <th data-k="ab">Abstenção</th>
+          <th data-k="bc">Brancos</th>
+          <th data-k="nu">Nulos</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -161,7 +175,7 @@
       <p><b>Votos que faltam.</b> Para cada UF: eleitorado ainda não totalizado × taxa de votos válidos por eleitor. A taxa mistura o que já foi apurado na UF com o 1º turno, e o peso do apurado cresce conforme a UF avança.</p>
       <p><b>Projeção.</b> Cada UF tem um ponto de partida histórico: 60% o 1º turno de 2026 (Flávio × Lula) e 40% o 2º turno de 2022 (Bolsonaro × Lula), cada um corrigido pela variação que a apuração já mostra contra aquela base na mesma região (puxada para a variação nacional quando a região tem pouco voto). Os votos que faltam na UF são divididos pela mistura desse ponto de partida com o parcial da própria UF, que ganha peso conforme ela avança. Estimativa heurística e transparente, não pesquisa nem margem de erro formal.</p>
       <p><b>Para virar.</b> A fatia mínima dos votos válidos que faltam de que quem está atrás precisa para passar à frente. Acima de 100% significa que, pela estimativa, não há votos suficientes.</p>
-      <p><b>1º turno.</b> Comparação entre Flávio e Lula considerando só os dois (eleição 6257, 04/10/2026). "Variação" é a mudança na fatia de Flávio, em pontos percentuais. A coluna 2022 é o 2º turno de 2022 (fonte: resultados oficiais do TSE compilados na Wikipédia).</p>
+      <p><b>1º turno.</b> Comparação entre Flávio e Lula considerando só os dois (eleição 6257, 04/10/2026). "Variação" é a mudança na fatia de Flávio, em pontos percentuais. Abstenção é calculada sobre o eleitorado das seções já totalizadas; brancos e nulos, sobre o total de votos (como o TSE publica). A coluna 2022 é o 2º turno de 2022 (fonte: resultados oficiais do TSE compilados na Wikipédia).</p>
     </div>
   </section>
 

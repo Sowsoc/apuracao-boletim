@@ -31,8 +31,10 @@ def get(uf):
             for c in p["cand"]:
                 if c["n"] == "22": F = int(num(c["vap"]))
                 if c["n"] == "13": L = int(num(c["vap"]))
-    return {"ht": d.get("ht"), "pst": num(d["s"]["pstn"]), "te": int(num(d["e"]["te"])),
-            "est": int(num(d["e"]["est"])), "F": F, "L": L}
+    e, v = d["e"], d["v"]
+    return {"ht": d.get("ht"), "pst": num(d["s"]["pstn"]), "te": int(num(e["te"])),
+            "est": int(num(e["est"])), "F": F, "L": L, "a": int(num(e.get("a"))),
+            "vb": int(num(v.get("vb"))), "vn": int(num(v.get("tvn"))), "tv": int(num(v.get("tv")))}
 
 
 def gh(*args, inp=None):
@@ -78,7 +80,7 @@ def main():
                 for uf in UFS:
                     try:
                         u = get(uf)
-                        ufs[uf] = [u["pst"], u["te"], u["est"], u["F"], u["L"]]
+                        ufs[uf] = [u["pst"], u["te"], u["est"], u["F"], u["L"], u["a"], u["vb"], u["vn"], u["tv"]]
                     except Exception as e:  # UF falhou: reaproveita o último retrato dela
                         if hist["pts"] and uf in hist["pts"][-1]["uf"]:
                             ufs[uf] = hist["pts"][-1]["uf"][uf]

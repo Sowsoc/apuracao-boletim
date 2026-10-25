@@ -56,7 +56,8 @@
     return {
       ht: d.ht, dt: d.dt, final: d.tf === 's',
       pst: num(d.s && d.s.pstn), te: num(d.e && d.e.te), est: num(d.e && d.e.est),
-      comp: num(d.e && d.e.c), vv: num(d.v && d.v.vv), F: c[CF], L: c[CL], eleito,
+      comp: num(d.e && d.e.c), vv: num(d.v && d.v.vv),
+      a: num(d.e && d.e.a), vb: num(d.v && d.v.vb), vn: num(d.v && d.v.tvn), tv: num(d.v && d.v.tv), F: c[CF], L: c[CL], eleito,
     };
   }
 
@@ -98,6 +99,14 @@
     mapMode: 'ap', sel: null, sort: { k: 'te', asc: false },
     sim: null, simTouched: false, lastHt: null, nextAt: 0, err: null,
   };
+
+  // Comparecimento: abstenção sobre o eleitorado já apurado; brancos e nulos sobre o total de votos.
+  function turn(o) {
+    if (!o || !o.est || o.a == null || !o.tv) return null;
+    const pa = 100 * o.a / o.est;
+    return { pa, pc: 100 - pa, pb: 100 * o.vb / o.tv, pn: 100 * o.vn / o.tv, a: o.a, vb: o.vb, vn: o.vn, c: o.est - o.a };
+  }
+  const T1 = (u) => turn(window.T1_2026 && window.T1_2026[u]);
 
   // ---------- projeção ----------
   // Prior histórico por UF: 1º turno 2026 (Flávio × Lula entre os dois) e 2º turno 2022
@@ -241,7 +250,7 @@
   // e os retratos consecutivos viram o feed. A leitura ao vivo completa o que vier depois.
   const HIST_URL = 'https://raw.githubusercontent.com/Sowsoc/apuracao-boletim/data/history.json';
   S.srv = { pts: [], chart: [], feed: [], lastHt: null };
-  const unpack = (uf) => { const o = {}; for (const k in uf) { const [pst, te, est, F, L] = uf[k]; o[k] = { pst, te, est, F, L }; } return o; };
+  const unpack = (uf) => { const o = {}; for (const k in uf) { const [pst, te, est, F, L, a, vb, vn, tv] = uf[k]; o[k] = { pst, te, est, F, L, a, vb, vn, tv }; } return o; };
   function buildSrv() {
     const pts = S.srv.pts, chart = [], feed = [];
     let prev = null;
@@ -325,7 +334,7 @@
 
   // ---------- render ----------
   function renderAll() {
-    renderStamp(); renderLede(); renderRace(); renderFacts(); renderMap(); renderSim(); renderFeed(); renderChart(); renderTable();
+    renderStamp(); renderLede(); renderRace(); renderFacts(); renderTurnout(); renderMap(); renderSim(); renderFeed(); renderChart(); renderTable();
   }
 
   function renderStamp() {
@@ -410,6 +419,17 @@
     }
   }
 
+  function renderTurnout() {
+    const t = turn(S.br), t1 = T1('br');
+    const ids = ['tCmp', 'tAbs', 'tBr', 'tNu'];
+    if (!t) { ids.forEach((i) => { $(i).textContent = '—'; }); return; }
+    const vs = (now, then) => then == null ? '' : ` · 1º turno ${fP1(then)} (${fPP(now - then)})`;
+    tween($('tCmp'), t.pc, fP2); $('tCmpS').textContent = `${fMil(t.c)} eleitores` + vs(t.pc, t1 && t1.pc);
+    tween($('tAbs'), t.pa, fP2); $('tAbsS').textContent = `${fMil(t.a)} eleitores` + vs(t.pa, t1 && t1.pa);
+    tween($('tBr'), t.pb, fP2); $('tBrS').textContent = `${fMil(t.vb)} votos` + vs(t.pb, t1 && t1.pb);
+    tween($('tNu'), t.pn, fP2); $('tNuS').textContent = `${fMil(t.vn)} votos` + vs(t.pn, t1 && t1.pn);
+  }
+
   // ----- mapa -----
   const HX = (() => {
     const s = 37, w = Math.sqrt(3) * s, pad = 6;
@@ -470,6 +490,12 @@
       } else if (mode === 'pr' && pr && S.proj.ok) {
         const mg = 2 * pr.pF - 100; color = tone(mg); level = lvl(mg); frac = 1;
         label = (mg >= 0 ? 'F+' : 'L+') + nf0.format(Math.abs(mg));
+      } else if (mode === 'ab' && turn(a)) {
+        const pa = turn(a).pa;
+        level = pa < 15 ? 15 : pa < 20 ? 30 : pa < 25 ? 45 : pa < 30 ? 64 : 82;
+        color = `color-mix(in oklab, var(--ink) ${level}%, var(--paper))`;
+        frac = a.pst <= 0 ? 0 : 0.1 + 0.9 * a.pst / 100;
+        label = nf1.format(pa) + '%';
       } else if (mode === 'v22' && sh != null && share22(uf) != null) {
         const sw = sh - 100 * share22(uf); color = toneSw(sw); frac = 1;
         level = Math.abs(sw) >= 3 ? 70 : 0;
@@ -499,7 +525,9 @@
 
   function renderLegend() {
     const lg = $('legend');
-    if (S.mapMode === 'sw' || S.mapMode === 'v22') {
+    if (S.mapMode === 'ab') {
+      lg.innerHTML = `<span>Abstenção</span><span class="ramp">${[15, 30, 45, 64, 82].map((p) => `<i style="background:color-mix(in oklab,var(--ink) ${p}%,var(--paper))"></i>`).join('')}</span><span>&lt;15 · 15–20 · 20–25 · 25–30 · &gt;30%, sobre o eleitorado já apurado</span>`;
+    } else if (S.mapMode === 'sw' || S.mapMode === 'v22') {
       const st = [92, 65, 40, 18];
       lg.innerHTML = `<span>Flávio melhorou</span><span class="ramp">${st.map((p) => `<i style="background:color-mix(in oklab,var(--f) ${p}%,var(--paper))"></i>`).join('')}${st.slice().reverse().map((p) => `<i style="background:color-mix(in oklab,var(--l) ${p}%,var(--paper))"></i>`).join('')}</span><span>Lula melhorou</span><span>em relação ${S.mapMode === 'sw' ? 'ao 1º turno' : 'a 2022 (Bolsonaro)'} (faixas: 1, 3, 6 p.p.)</span>`;
     } else {
@@ -522,6 +550,7 @@
       row('<span class="c-f">Flávio</span>', sh == null ? '—' : `${fP2(sh)} · ${fMil(a.F)}`) +
       row('<span class="c-l">Lula</span>', sh == null ? '—' : `${fP2(100 - sh)} · ${fMil(a.L)}`) +
       row('Eleitorado', fMil(a.te)) +
+      (turn(a) ? row('Abstenção', fP1(turn(a).pa) + (T1(uf) ? ` (1º t. ${fP1(T1(uf).pa)})` : '')) + row('Brancos · Nulos', `${fP1(turn(a).pb)} · ${fP1(turn(a).pn)}`) : '') +
       (s1 != null ? row('1º turno (F × L)', `${fP1(s1)} × ${fP1(100 - s1)}`) : '') +
       (sh != null && s1 != null ? row('Variação Flávio', fPP(sh - s1)) : '') +
       (share22(uf) != null ? row('2022 (Bolsonaro × Lula)', `${fP1(100 * share22(uf))} × ${fP1(100 - 100 * share22(uf))}`) : '') +
@@ -604,7 +633,7 @@
       const b = S.t1[uf], pr = S.proj && S.proj.ok && S.proj.per[uf];
       const sh = a.F + a.L ? 100 * a.F / (a.F + a.L) : null;
       const s1 = b && b.F + b.L ? 100 * b.F / (b.F + b.L) : null;
-      out.push({ uf, nome, reg, te: a.te, pst: a.pst, pF: sh, pL: sh == null ? null : 100 - sh, mg: sh == null ? null : 2 * sh - 100, mg1: s1 == null ? null : 2 * s1 - 100, mg22: share22(uf) == null ? null : 200 * share22(uf) - 100, sw: sh != null && s1 != null ? sh - s1 : null, prF: pr ? pr.pF : null });
+      out.push({ uf, nome, reg, te: a.te, pst: a.pst, pF: sh, pL: sh == null ? null : 100 - sh, mg: sh == null ? null : 2 * sh - 100, mg1: s1 == null ? null : 2 * s1 - 100, mg22: share22(uf) == null ? null : 200 * share22(uf) - 100, sw: sh != null && s1 != null ? sh - s1 : null, prF: pr ? pr.pF : null, ab: turn(a) ? turn(a).pa : null, bc: turn(a) ? turn(a).pb : null, nu: turn(a) ? turn(a).pn : null });
     }
     const { k, asc } = S.sort;
     out.sort((x, y) => {
@@ -623,10 +652,10 @@
     const b = S.br, P = S.proj;
     if (b && b.F + b.L) {
       const sh = 100 * b.F / (b.F + b.L);
-      h += `<tr class="br"><td class="tl"><b>BR</b>Brasil</td><td>${fInt(b.te)}</td><td>${fP2(b.pst)}<span class="minibar"><i style="width:${b.pst}%"></i></span></td><td>${fP2(sh)}</td><td>${fP2(100 - sh)}</td><td>${mgf(2 * sh - 100)}</td><td></td><td></td><td>${P && P.ok ? fPP(P.swing * 100) : ''}</td><td>${P && P.ok ? fP1(P.pF) : '—'}</td></tr>`;
+      h += `<tr class="br"><td class="tl"><b>BR</b>Brasil</td><td>${fInt(b.te)}</td><td>${fP2(b.pst)}<span class="minibar"><i style="width:${b.pst}%"></i></span></td><td>${fP2(sh)}</td><td>${fP2(100 - sh)}</td><td>${mgf(2 * sh - 100)}</td><td></td><td></td><td>${P && P.ok ? fPP(P.swing * 100) : ''}</td><td>${P && P.ok ? fP1(P.pF) : '—'}</td>${(() => { const t = turn(b); return t ? `<td>${fP1(t.pa)}</td><td>${fP1(t.pb)}</td><td>${fP1(t.pn)}</td>` : '<td>—</td><td>—</td><td>—</td>'; })()}</tr>`;
     }
     for (const r of rows()) {
-      h += `<tr><td class="tl"><b>${r.uf === 'zz' ? 'EXT' : r.uf.toUpperCase()}</b>${r.nome}</td><td>${fInt(r.te)}</td><td>${fP1(r.pst)}<span class="minibar"><i style="width:${r.pst}%"></i></span></td><td>${v(r.pF, fP1)}</td><td>${v(r.pL, fP1)}</td><td>${v(r.mg, mgf)}</td><td>${v(r.mg1, mgf)}</td><td>${v(r.mg22, mgf)}</td><td>${v(r.sw, fPP)}</td><td>${v(r.prF, fP1)}</td></tr>`;
+      h += `<tr><td class="tl"><b>${r.uf === 'zz' ? 'EXT' : r.uf.toUpperCase()}</b>${r.nome}</td><td>${fInt(r.te)}</td><td>${fP1(r.pst)}<span class="minibar"><i style="width:${r.pst}%"></i></span></td><td>${v(r.pF, fP1)}</td><td>${v(r.pL, fP1)}</td><td>${v(r.mg, mgf)}</td><td>${v(r.mg1, mgf)}</td><td>${v(r.mg22, mgf)}</td><td>${v(r.sw, fPP)}</td><td>${v(r.prF, fP1)}</td><td>${v(r.ab, fP1)}</td><td>${v(r.bc, fP1)}</td><td>${v(r.nu, fP1)}</td></tr>`;
     }
     tb.innerHTML = h;
     document.querySelectorAll('#tbl th').forEach((th) => { th.classList.toggle('on', th.dataset.k === S.sort.k); th.classList.toggle('asc', th.dataset.k === S.sort.k && S.sort.asc); });
@@ -646,6 +675,7 @@
       ap: 'Cada hexágono enche de baixo para cima conforme as seções do estado são totalizadas. A cor indica quem lidera e por quanto.',
       pr: 'Resultado projetado de cada UF ao fim da apuração, pelo método descrito no fim da página.',
       sw: 'Quanto a fatia de Flávio (entre os dois) mudou em relação ao 1º turno, com o que já foi apurado.',
+      ab: 'Abstenção em cada UF, sobre o eleitorado das seções já totalizadas. O hexágono enche conforme a apuração avança.',
       v22: 'Fatia de Flávio hoje comparada à de Bolsonaro no 2º turno de 2022, estado a estado, com o que já foi apurado.',
     }[S.mapMode];
     renderMap();
