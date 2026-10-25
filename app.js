@@ -60,14 +60,24 @@
     };
   }
 
+  const FORCE_MIRROR = /[?&]espelho=1/.test(location.search); // teste do modo espelho
   async function getJSON(u) {
-    const r = await fetch(u, { cache: 'no-store' });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    return r.json();
+    if (FORCE_MIRROR && u.indexOf(BASE) === 0) throw new Error('teste de espelho');
+    // timeout: em noite de pico o TSE às vezes segura a conexão sem responder
+    const ac = typeof AbortController === 'function' ? new AbortController() : null;
+    const to = ac && setTimeout(() => ac.abort(), 12000);
+    try {
+      const r = await fetch(u, { cache: 'no-store', signal: ac ? ac.signal : undefined });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return await r.json();
+    } catch (e) {
+      throw new Error(e && e.name === 'AbortError' ? 'o TSE demorou a responder' : (e.message || 'falha de rede'));
+    } finally { if (to) clearTimeout(to); }
   }
 
   // 1º turno: só Flávio e Lula, por UF. Busca uma vez e guarda.
   async function loadT1() {
+    if (window.T1_2026 && Object.keys(window.T1_2026).length >= 28) return window.T1_2026;
     const c = store.get(LS.t1, null);
     if (c && Object.keys(c).length >= 28) return c;
     const out = {};
@@ -168,8 +178,10 @@
       S.err = null;
       S.proj = project();
       record();
+      S.mirror = false;
     } catch (e) {
       S.err = e.message || 'falha de rede';
+      await useMirror();
     }
     renderAll();
     S.nextAt = Date.now() + POLL_MS;
@@ -245,7 +257,7 @@
     S.srv.feed = feed.reverse();
     S.srv.lastHt = pts.length ? pts[pts.length - 1].br.ht : null;
   }
-  async function loadHist() {
+  async function fetchHist() {
     try {
       const r = await fetch(HIST_URL + '?m=' + Math.floor(Date.now() / 30000), { cache: 'no-store' });
       if (r.ok) {
@@ -253,7 +265,21 @@
         if (d && Array.isArray(d.pts) && d.pts.length !== S.srv.pts.length) { S.srv.pts = d.pts; buildSrv(); renderChart(); renderFeed(); }
       }
     } catch (e) {}
-    setTimeout(loadHist, 60000);
+  }
+  async function loadHist() { await fetchHist(); setTimeout(loadHist, 60000); }
+  // Espelho: se o TSE não responde para este aparelho, usa o último retrato gravado.
+  async function useMirror() {
+    if (S.mirrorAt == null || Date.now() - S.mirrorAt > 30000) { S.mirrorAt = Date.now(); await fetchHist(); }
+    const pts = S.srv.pts;
+    if (!pts.length) return;
+    const last = pts[pts.length - 1];
+    if (S.br && !S.mirror && S.br.ht >= last.br.ht) return; // a leitura direta anterior é mais nova
+    const prevBr = S.br, prevUf = S.uf, U = unpack(last.uf);
+    S.br = { ...last.br, final: false, eleito: null, vv: 0, comp: 0 };
+    S.uf = U; S.prevUf = prevUf; S.mirror = true;
+    if (prevBr && prevBr.ht !== last.br.ht) diffFeed(prevBr, S.br, prevUf, U);
+    S.proj = project();
+    record();
   }
   function chartPts() {
     const c = S.srv.chart;
@@ -306,10 +332,11 @@
     const st = $('stampTx'), al = $('alert');
     if (S.err && !S.br) { st.innerHTML = '<span class="err">sem conexão com o TSE</span>'; }
     else if (S.br) {
-      const tag = S.br.final ? 'FINAL' : 'AO VIVO';
+      const tag = S.br.final ? 'FINAL' : S.mirror ? 'ESPELHO' : 'AO VIVO';
       st.innerHTML = `<span class="live">${tag}</span>TSE às <b>${S.br.ht}</b>`;
     }
-    if (S.err) { al.hidden = false; al.textContent = `A última leitura falhou (${S.err}). Tentando de novo em 10 s; os números abaixo são da leitura anterior.`; }
+    if (S.err && S.mirror) { al.hidden = false; al.textContent = `Seu aparelho não está conseguindo falar com o TSE agora (${S.err}). Mostrando a cópia gravada pelo boletim, com alguns minutos de atraso. O site continua tentando o TSE a cada 10 s e volta sozinho para o ao vivo.`; }
+    else if (S.err) { al.hidden = false; al.textContent = `A última leitura falhou (${S.err}). Tentando de novo em 10 s; os números abaixo são da leitura anterior.`; }
     else al.hidden = true;
   }
 
