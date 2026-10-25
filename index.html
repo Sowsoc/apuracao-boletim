@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Boletim da Apuração · 2º turno 2026</title>
+<meta name="description" content="A apuração do 2º turno de 2026 ao vivo, lida direto dos arquivos públicos do TSE: quanto falta, quanto precisa para virar e o que mudou em cada estado.">
+<meta property="og:title" content="Boletim da Apuração · 2º turno 2026">
+<meta property="og:description" content="Ao vivo, direto do TSE: quanto falta, quanto precisa para virar e o que mudou em cada estado.">
+<meta name="theme-color" content="#f3efe6">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23f3efe6'/%3E%3Cpath d='M4 4h11v24H4z' fill='%231f4e79'/%3E%3Cpath d='M17 4h11v24H17z' fill='%23b23a2e'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page">
+
+  <header class="mast">
+    <div class="mast-l">
+      <div class="nameplate">Boletim <em>da</em> Apuração</div>
+      <div class="dateline">Domingo, 25 de outubro de 2026 · 2º turno · Presidente da República</div>
+    </div>
+    <div class="mast-r">
+      <div class="stamp" id="stamp"><span id="stampTx">conectando ao TSE…</span></div>
+      <div class="tick"><i id="tickBar"></i></div>
+      <button class="theme" id="themeBtn" type="button" aria-label="Alternar tema">◐</button>
+    </div>
+  </header>
+
+  <div class="alert" id="alert" hidden></div>
+
+  <section class="lede">
+    <h1 class="headline" id="headline">Aguardando os primeiros números do TSE</h1>
+    <p class="dek" id="dek">O boletim lê os arquivos públicos de divulgação do Tribunal Superior Eleitoral a cada 30 segundos.</p>
+  </section>
+
+  <section class="race" aria-label="Placar nacional">
+    <div class="cand cand-f">
+      <div class="cand-num">22 · PL</div>
+      <div class="cand-name">Flávio Bolsonaro</div>
+      <div class="cand-pct num" id="pctF">—</div>
+      <div class="cand-votes num" id="votF">—</div>
+    </div>
+    <div class="cand cand-l">
+      <div class="cand-num">13 · PT</div>
+      <div class="cand-name">Lula</div>
+      <div class="cand-pct num" id="pctL">—</div>
+      <div class="cand-votes num" id="votL">—</div>
+    </div>
+    <div class="bar" id="bar">
+      <div class="bar-f" id="barF"></div>
+      <div class="bar-l" id="barL"></div>
+      <div class="bar-mid"><span>50%</span></div>
+      <div class="bar-proj" id="barProj" hidden><span>projeção</span></div>
+    </div>
+    <div class="won" id="won" hidden></div>
+  </section>
+
+  <section class="facts" aria-label="Números-chave">
+    <div class="fact">
+      <div class="fact-k">Seções totalizadas</div>
+      <div class="fact-v num" id="fSec">—</div>
+      <div class="meter"><i id="fSecBar"></i></div>
+      <div class="fact-s num" id="fSecS">—</div>
+    </div>
+    <div class="fact">
+      <div class="fact-k">Diferença</div>
+      <div class="fact-v num" id="fDiff">—</div>
+      <div class="fact-s num" id="fDiffS">—</div>
+    </div>
+    <div class="fact">
+      <div class="fact-k">Votos válidos que faltam <span class="est">estim.</span></div>
+      <div class="fact-v num" id="fRem">—</div>
+      <div class="fact-s num" id="fRemS">—</div>
+    </div>
+    <div class="fact fact-hot">
+      <div class="fact-k" id="fNeedK">Para virar</div>
+      <div class="fact-v num" id="fNeed">—</div>
+      <div class="fact-s" id="fNeedS">—</div>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="block map-block">
+      <div class="bh">
+        <h2>O país, estado por estado</h2>
+        <div class="seg" id="mapMode" role="tablist">
+          <button type="button" data-m="ap" class="on">Apurado</button>
+          <button type="button" data-m="pr">Projeção</button>
+          <button type="button" data-m="sw">Variação × 1º turno</button>
+        </div>
+      </div>
+      <p class="bnote" id="mapNote">Cada hexágono enche de baixo para cima conforme as seções do estado são totalizadas. A cor indica quem lidera e por quanto.</p>
+      <div class="map-wrap">
+        <svg id="hexmap" viewBox="0 0 520 470" role="img" aria-label="Mapa em hexágonos das UFs"></svg>
+        <div class="uf-card" id="ufCard" hidden></div>
+      </div>
+      <div class="legend" id="legend"></div>
+    </section>
+
+    <aside class="side">
+      <section class="block sim-block">
+        <div class="bh"><h2>E se…</h2></div>
+        <p class="bnote">Arraste para dividir os votos que ainda faltam e ver onde a eleição termina.</p>
+        <div class="sim">
+          <div class="sim-row">
+            <span class="sim-lbl c-f">Flávio</span>
+            <input type="range" id="simR" min="20" max="80" step="0.5" value="50" aria-label="Fatia de Flávio nos votos restantes">
+            <span class="sim-lbl c-l">Lula</span>
+          </div>
+          <div class="sim-split num" id="simSplit">50% · 50% do que falta</div>
+          <div class="sim-out" id="simOut">—</div>
+          <button type="button" class="link" id="simReset">voltar para a projeção</button>
+        </div>
+      </section>
+
+      <section class="block feed-block">
+        <div class="bh"><h2>O que mudou</h2><span class="hint" id="feedHint">a cada leitura</span></div>
+        <ol class="feed" id="feed"><li class="feed-empty">As mudanças entre leituras do TSE aparecem aqui.</li></ol>
+      </section>
+    </aside>
+  </div>
+
+  <section class="block chart-block">
+    <div class="bh">
+      <h2>Como a vantagem andou</h2>
+      <div class="cleg"><span><i class="k-ap"></i>apurado</span><span><i class="k-pr"></i>projeção</span></div>
+    </div>
+    <p class="bnote">Fatia de Flávio nos votos válidos (Flávio + Lula) conforme as seções são totalizadas. Acima de 50%, Flávio lidera. O histórico fica salvo neste navegador.</p>
+    <div class="chart-wrap"><svg id="chart" viewBox="0 0 900 280"></svg></div>
+  </section>
+
+  <section class="block table-block">
+    <div class="bh"><h2>Todas as UFs</h2><span class="hint">clique no cabeçalho para ordenar</span></div>
+    <div class="tbl-wrap">
+      <table class="tbl" id="tbl">
+        <thead><tr>
+          <th data-k="nome" class="tl">UF</th>
+          <th data-k="te">Eleitorado</th>
+          <th data-k="pst">Apurado</th>
+          <th data-k="pF">Flávio</th>
+          <th data-k="pL">Lula</th>
+          <th data-k="mg">Margem</th>
+          <th data-k="mg1">1º turno</th>
+          <th data-k="sw">Variação</th>
+          <th data-k="prF">Proj. Flávio</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="block method">
+    <div class="bh"><h2>Como se lê este boletim</h2></div>
+    <div class="cols">
+      <p><b>Dados.</b> Tudo vem dos arquivos públicos de divulgação do TSE (resultados.tse.jus.br), lidos direto pelo seu navegador a cada 30 s: Brasil, 27 UFs e Exterior. Nenhum servidor intermediário.</p>
+      <p><b>Votos que faltam.</b> Para cada UF: eleitorado ainda não totalizado × taxa de votos válidos por eleitor. A taxa mistura o que já foi apurado na UF com o 1º turno, e o peso do apurado cresce conforme a UF avança.</p>
+      <p><b>Projeção.</b> Os votos que faltam em cada UF são divididos pela mistura do resultado parcial da UF com o 1º turno da UF somado à variação nacional observada. É uma estimativa heurística e transparente, não uma pesquisa nem uma margem de erro formal.</p>
+      <p><b>Para virar.</b> A fatia mínima dos votos válidos que faltam de que quem está atrás precisa para passar à frente. Acima de 100% significa que, pela estimativa, não há votos suficientes.</p>
+      <p><b>1º turno.</b> Comparação entre Flávio e Lula considerando só os dois (eleição 6257, 04/10/2026). "Variação" é a mudança na fatia de Flávio, em pontos percentuais.</p>
+    </div>
+  </section>
+
+  <footer class="foot">Fonte: Tribunal Superior Eleitoral · arquivos públicos de divulgação. Boletim independente, sem vínculo com o TSE ou com campanhas. Sem cookies e sem rastreamento.</footer>
+</div>
+
+<script src="hexmap.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

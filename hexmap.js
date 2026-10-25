@@ -1,0 +1,33 @@
+// Grade de hexágonos (pointy-top, linhas ímpares deslocadas meia coluna).
+// [linha, coluna] escolhidos para preservar vizinhança aproximada entre UFs.
+window.UFS = [
+  // uf, nome, região, linha, coluna
+  ['rr', 'Roraima', 'Norte', 0, 2],
+  ['ap', 'Amapá', 'Norte', 0, 4],
+  ['am', 'Amazonas', 'Norte', 1, 1],
+  ['pa', 'Pará', 'Norte', 1, 3],
+  ['ma', 'Maranhão', 'Nordeste', 1, 4],
+  ['ce', 'Ceará', 'Nordeste', 1, 5],
+  ['rn', 'Rio Grande do Norte', 'Nordeste', 1, 6],
+  ['ac', 'Acre', 'Norte', 2, 0],
+  ['ro', 'Rondônia', 'Norte', 2, 1],
+  ['mt', 'Mato Grosso', 'Centro-Oeste', 2, 2],
+  ['to', 'Tocantins', 'Norte', 2, 3],
+  ['pi', 'Piauí', 'Nordeste', 2, 4],
+  ['pe', 'Pernambuco', 'Nordeste', 2, 5],
+  ['pb', 'Paraíba', 'Nordeste', 2, 6],
+  ['ms', 'Mato Grosso do Sul', 'Centro-Oeste', 3, 1],
+  ['go', 'Goiás', 'Centro-Oeste', 3, 2],
+  ['df', 'Distrito Federal', 'Centro-Oeste', 3, 3],
+  ['ba', 'Bahia', 'Nordeste', 3, 4],
+  ['al', 'Alagoas', 'Nordeste', 3, 5],
+  ['pr', 'Paraná', 'Sul', 4, 1],
+  ['sp', 'São Paulo', 'Sudeste', 4, 2],
+  ['mg', 'Minas Gerais', 'Sudeste', 4, 3],
+  ['es', 'Espírito Santo', 'Sudeste', 4, 4],
+  ['se', 'Sergipe', 'Nordeste', 4, 5],
+  ['sc', 'Santa Catarina', 'Sul', 5, 1],
+  ['rj', 'Rio de Janeiro', 'Sudeste', 5, 2],
+  ['rs', 'Rio Grande do Sul', 'Sul', 6, 1],
+  ['zz', 'Exterior', 'Exterior', 6, 5],
+];
