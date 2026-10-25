@@ -5,12 +5,14 @@ Cada ponto é um retrato completo (Brasil + 28 UFs), para que o site recalcule a
 projeção histórica com o mesmo modelo do navegador. Publica via API do GitHub (gh).
 Uso: python3 -u tools/recorder.py   (para com Ctrl+C)
 """
-import base64, json, subprocess, sys, time, urllib.request
+import base64, json, os, subprocess, sys, time, urllib.request
 
 BASE = "https://resultados.tse.jus.br/oficial/ele2026/6258/dados"
 UFS = "ac al ap am ba ce df es go ma mt ms mg pa pb pr pe pi rj rn rs ro rr sc sp se to zz".split()
 REPO, BRANCH, PATH = "Sowsoc/apuracao-boletim", "data", "history.json"
 POLL, PUSH_EVERY = 15, 60
+# No GitHub Actions o job tem teto de 6 h: para antes e (se a apuração não acabou) se redispara.
+RUN_SECONDS = int(os.environ.get("RUN_SECONDS", "0"))
 
 
 def num(s):
@@ -34,7 +36,8 @@ def get(uf):
     e, v = d["e"], d["v"]
     return {"ht": d.get("ht"), "pst": num(d["s"]["pstn"]), "te": int(num(e["te"])),
             "est": int(num(e["est"])), "F": F, "L": L, "a": int(num(e.get("a"))),
-            "vb": int(num(v.get("vb"))), "vn": int(num(v.get("tvn"))), "tv": int(num(v.get("tv")))}
+            "vb": int(num(v.get("vb"))), "vn": int(num(v.get("tvn"))), "tv": int(num(v.get("tv"))),
+            "final": d.get("tf") == "s"}
 
 
 def gh(*args, inp=None):
@@ -72,7 +75,13 @@ def main():
     last_ht = hist["pts"][-1]["br"]["ht"] if hist["pts"] else None
     dirty, last_push = False, 0.0
     print(f"retomando com {len(hist['pts'])} pontos", flush=True)
+    t0, final = time.time(), False
     while True:
+        if (RUN_SECONDS and time.time() - t0 > RUN_SECONDS) or (final and not dirty):
+            if dirty:
+                sha = push(hist, sha)
+            print("encerrando:", "apuração final" if final else "fim da janela do job", flush=True)
+            return 0 if final else 3
         try:
             br = get("br")
             if br["ht"] != last_ht and br["F"] + br["L"] > 0:
@@ -87,6 +96,7 @@ def main():
                         print("falha", uf, e, flush=True)
                 hist["pts"].append({"t": int(time.time()), "br": br, "uf": ufs})
                 last_ht, dirty = br["ht"], True
+                final = br.get("final", False)
                 print(time.strftime("%H:%M:%S"), br["ht"], f"{br['pst']:.2f}%", flush=True)
             if dirty and time.time() - last_push >= PUSH_EVERY:
                 try:

@@ -1,0 +1,35 @@
+name: gravador-apuracao
+
+# Grava a apuração (TSE) em history.json no branch `data`, sem depender do PC de ninguém.
+# Roda até ~5h40; se a apuração ainda não terminou, dispara a si mesmo de novo.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: gravador
+  cancel-in-progress: false
+
+jobs:
+  gravar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gravador
+        id: rec
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_SECONDS: "20400"
+        run: |
+          set +e
+          python3 -u tools/recorder.py
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+      - name: Redisparar se a apuração não terminou
+        if: steps.rec.outputs.code == '3'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run recorder.yml --ref main
